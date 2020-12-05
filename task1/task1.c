@@ -63,58 +63,64 @@ int main(int argc, char *argv[]) {
     MPI_Request req[ranksize - 1];
     MPI_Status  status[ranksize - 1];
 
-    FILE *file;
-
     Message messages[ranksize]; // for recieve messages
     Message message_for_send;
 
     message_for_send.rank_of_sender = myrank;
     strcpy(message_for_send.name_of_critical, "critical");
-    message_for_send.current_time = MPI_Wtime() - start;
+    double timestamp = MPI_Wtime() - start;
+    message_for_send.current_time = timestamp;
 
-    char ok[3];
-    strcpy(ok, "OK");
+    char ok_send[3];
+    char* ok_recv[3];
+    strcpy(ok_send, "OK");
 
+    printf("START PROGRAMM!!! PROCESS NUM = %d\n", myrank);
     int j = 0;
     // send request to all processes
     for (int i = (myrank + 1) % ranksize; i != myrank; i = (i + 1) % ranksize)
-        MPI_Isend(&message_for_send, 1, my_mpi_type, i, 1216, MPI_COMM_WORLD, &req[j++]);
+        MPI_Isend(&message_for_send, 1, my_mpi_type, i, 1215, MPI_COMM_WORLD, &req[j++]);
 
     j = 0;
     // recieve request from all other processes
     for (int i = (myrank + 1) % ranksize; i != myrank; i = (i + 1) % ranksize)
-        MPI_Recv(&messages[i], 1, my_mpi_type, i, 1216, MPI_COMM_WORLD, &status[j++]);
+        MPI_Recv(&messages[i], 1, my_mpi_type, i, 1215, MPI_COMM_WORLD, &status[j++]);
 
     // waiting until all other processes will recieved message of current process 
     if (ranksize > 1) MPI_Waitall(ranksize - 1, &req[0], &status[0]);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     int num_less = 0;
-    // send "OK" to processes which have less timestamp
-    for (int i = (myrank + 1) % ranksize; i != myrank; i = (i + 1) % ranksize)
-        if ( messages[i].current_time < message_for_send.current_time || 
-            (messages[i].current_time == message_for_send.current_time && 
-             messages[i].rank_of_sender < myrank))
-            MPI_Isend(&ok[0], 3, MPI_CHAR, i, 1217, MPI_COMM_WORLD, &req[num_less++]);
+    for (int i = 0; i < myrank; ++i)
+        if (messages[i].current_time <= timestamp)
+            MPI_Isend(&ok_send[0], 3, MPI_CHAR, i, 1217, MPI_COMM_WORLD, &req[num_less++]);
+
+    for (int i = myrank + 1; i < ranksize; ++i)
+        if (messages[i].current_time < timestamp)
+            MPI_Isend(&ok_send[0], 3, MPI_CHAR, i, 1217, MPI_COMM_WORLD, &req[num_less++]);
 
     j = 0;
     // waiting "OK" from all other processes
     for (int i = (myrank + 1) % ranksize; i != myrank; i = (i + 1) % ranksize)
-        MPI_Recv(&ok[0], 3, MPI_CHAR, i, 1217, MPI_COMM_WORLD, &status[j++]);
+        MPI_Recv(&ok_recv[0], 3, MPI_CHAR, MPI_ANY_SOURCE, 1217, MPI_COMM_WORLD, &status[j++]);
 
 
     /////////////////////////////////////////////
     // start critical section
     // <проверка наличия файла “critical.txt”>;
     double start_in_critical = MPI_Wtime();
-    printf("IN CRITICAL SECTION PROCESS NUM = %d; TIMESTAMP = %f\n", myrank, message_for_send.current_time);
+    FILE *file; 
+    printf("IN CRITICAL SECTION PROCESS NUM = %d; TIMESTAMP = %f\n", myrank, timestamp);
     file = fopen("critical.txt", "r");
     if (file != NULL) {
         fprintf(stderr, "ERROR: FILE EXIST! PROCESS NUM = %d\n", myrank);
         return 1;
     } else {
         file = fopen("critical.txt", "w");
+        printf("SHOULD NOT INTERSECT! NUM = %d; TIMESTAMP = %f\n", myrank, timestamp);
         // some work with file
-        sleep(rand() % 10 + 3);
+        sleep(rand() % 10 + 1);
+        printf("END SHOULD NOT INTERSECT! NUM = %d; TIME IN CRITICAL = %f\n", myrank, MPI_Wtime() - start_in_critical);
         fclose(file);
         remove("critical.txt");
     }
@@ -124,14 +130,16 @@ int main(int argc, char *argv[]) {
 
     // send "OK" to processes on remaining requests
 
-    for (int i = (myrank + 1) % ranksize; i != myrank; i = (i + 1) % ranksize)
-        if ( messages[i].current_time > message_for_send.current_time || 
-            (messages[i].current_time == message_for_send.current_time && 
-             messages[i].rank_of_sender > myrank))
-            MPI_Isend(&ok[0], 3, MPI_CHAR, i, 1217, MPI_COMM_WORLD, &req[num_less++]);
+    for (int i = 0; i < myrank; ++i)
+        if (messages[i].current_time > timestamp)
+            MPI_Isend(&ok_send[0], 3, MPI_CHAR, i, 1217, MPI_COMM_WORLD, &req[num_less++]);
+
+    for (int i = myrank + 1; i < ranksize; ++i)
+        if (messages[i].current_time >= timestamp)
+            MPI_Isend(&ok_send[0], 3, MPI_CHAR, i, 1217, MPI_COMM_WORLD, &req[num_less++]);
 
     // waiting until remaining processes will recieve "OK"
-    if (ranksize > 1) MPI_Waitall(num_less, &req[0], &status[0]);
+    if (ranksize > 1) MPI_Waitall(ranksize - 1, &req[0], &status[0]);
 
     // Finalize the MPI environment.
     MPI_Type_free( &my_mpi_type );
