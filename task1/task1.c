@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
     error = MPI_Init(&argc, &argv);
 
     double start = MPI_Wtime();
-    
+
     srand(getpid());
 
     // sleep(rand() % 5 + 1);
@@ -75,7 +75,6 @@ int main(int argc, char *argv[]) {
     char* ok_recv[3];
     strcpy(ok_send, "OK");
 
-    printf("START PROGRAMM!!! PROCESS NUM = %d\n", myrank);
     int j = 0;
     // send request to all processes
     for (int i = (myrank + 1) % ranksize; i != myrank; i = (i + 1) % ranksize)
@@ -108,23 +107,18 @@ int main(int argc, char *argv[]) {
     /////////////////////////////////////////////
     // start critical section
     // <проверка наличия файла “critical.txt”>;
-    double start_in_critical = MPI_Wtime();
     FILE *file; 
-    printf("IN CRITICAL SECTION PROCESS NUM = %d; TIMESTAMP = %f\n", myrank, timestamp);
     file = fopen("critical.txt", "r");
     if (file != NULL) {
         fprintf(stderr, "ERROR: FILE EXIST! PROCESS NUM = %d\n", myrank);
         return 1;
     } else {
         file = fopen("critical.txt", "w");
-        printf("SHOULD NOT INTERSECT! NUM = %d; TIMESTAMP = %f\n", myrank, timestamp);
         // some work with file
         sleep(rand() % 10 + 1);
-        printf("END SHOULD NOT INTERSECT! NUM = %d; TIME IN CRITICAL = %f\n", myrank, MPI_Wtime() - start_in_critical);
         fclose(file);
         remove("critical.txt");
     }
-    printf("END CRITICAL SECTION PROCESS NUM = %d; TIME IN CRITICAL = %f\n\n", myrank, MPI_Wtime() - start_in_critical);
     // end critical section
     /////////////////////////////////////////////
 
