@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <mpi.h>
+#include <signal.h>
 #include <omp.h>
 
 #define  Max(a,b) ((a)>(b)?(a):(b))
@@ -22,6 +23,11 @@ MPI_Request req[2];
 int myrank, ranksize;
 int nrow;
 int delta;
+int check_point = 2;
+int right_process;
+int left_process;
+int first_process;
+int last_process;
 MPI_Status status[2];
 
 
@@ -36,6 +42,12 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &ranksize);
     MPI_Barrier(MPI_COMM_WORLD);
+
+
+    left_process = myrank - 1;
+    right_process = myrank + 1;
+    first_process = 0;
+    last_process = ranksize - 1;
 
     int startrow = ((myrank * (N-2)) / ranksize) + 1;
     int lastrow = ((myrank + 1) * (N-2)) / ranksize;
@@ -54,20 +66,20 @@ int main(int argc, char **argv)
     for(it=1; it<=itmax; it++)
     {
         eps = 0.;
-        if (myrank != ranksize-1)
+        if (myrank != last_process)
         {
-            MPI_Irecv(&A[nrow+1][0], N*N, MPI_DOUBLE, myrank+1, 1216, MPI_COMM_WORLD, &req[0]);
+            MPI_Irecv(&A[nrow+1][0], N*N, MPI_DOUBLE, right_process, 1216, MPI_COMM_WORLD, &req[0]);
         }
-        if (myrank != 0)
+        if (myrank != first_process)
         {
-             MPI_Isend(&A[1][0], N*N, MPI_DOUBLE, myrank-1, 1216, MPI_COMM_WORLD, &req[1]);
+             MPI_Isend(&A[1][0], N*N, MPI_DOUBLE, left_process, 1216, MPI_COMM_WORLD, &req[1]);
         }
         ll = 2; shift = 0;
-        if (myrank == 0)
+        if (myrank == first_process)
         {
             ll = 1;
         }
-        if (myrank == ranksize-1)
+        if (myrank == last_process)
         {
             ll = 1; shift = 1;
         }
@@ -75,7 +87,7 @@ int main(int argc, char **argv)
             MPI_Waitall(ll, &req[shift], &status[0]);
         }
         relax();
-        if (myrank == 0)
+        if (myrank == first_process)
         {
             printf( "it=%4i   eps=%f\n", it, reductEps);
         }
@@ -83,7 +95,7 @@ int main(int argc, char **argv)
     }
 
     verify();
-    if (myrank == 0)
+    if (myrank == first_process)
     {
         printf("  S = %f\n",reductSum);
     }
@@ -109,18 +121,18 @@ void relax()
 {
     for(j=1; j<=N-2; j++)
     {
-        if (myrank != 0)
+        if (myrank != first_process)
         {
-            MPI_Recv(&A[0][j*N], N, MPI_DOUBLE, myrank-1, 1215, MPI_COMM_WORLD, &status[0]);
+            MPI_Recv(&A[0][j*N], N, MPI_DOUBLE, left_process, 1215, MPI_COMM_WORLD, &status[0]);
         }
         for(i=1; i<=nrow; i++)
             for(k=1; k<=N-2; k++)
             {
                 A[i][j*N + k] = (A[i-1][j*N + k]+A[i+1][j*N + k])*0.5;
             }
-        if (myrank != ranksize-1)
+        if (myrank != last_process)
         {
-            MPI_Send(&A[nrow][j*N], N, MPI_DOUBLE, myrank+1, 1215, MPI_COMM_WORLD);
+            MPI_Send(&A[nrow][j*N], N, MPI_DOUBLE, right_process, 1215, MPI_COMM_WORLD);
         }
     }
     MPI_Barrier(MPI_COMM_WORLD);
