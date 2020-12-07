@@ -37,8 +37,6 @@ int main(int argc, char *argv[]) {
 
     srand(getpid());
 
-    // sleep(rand() % 5 + 1);
-
     if (error != MPI_SUCCESS) {
         fprintf(stderr, "ERROR: CAN'T MPI INIT\n");
         return 1;
