@@ -19,7 +19,7 @@ long int check_point = 50; // checkpoint (can set in command line)
 double maxeps = 0.1e-7;
 int itmax = 100;
 int it = 1;
-int was_not_faults = 1;
+int was_not_faults = 1; // for avoiding repeat of data saving
 int i,j,k;
 int ll, shift;
 
