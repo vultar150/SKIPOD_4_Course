@@ -6,8 +6,7 @@
 #include <time.h>
 #include <mpi.h>
 
-
-const int MAX_SIZE_NAME = 80;
+#define MAX_SIZE_NAME 80
 
 
 typedef struct {
